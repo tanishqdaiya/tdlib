@@ -29,7 +29,7 @@
    See LICENSE for details.
 */
 
-#IFNDEF TDLIB_H
+#ifndef TDLIB_H
 #define TDLIB_H
 
 /* PRIMER
@@ -139,8 +139,11 @@
    string views by td_string_view_equal.
 
    You can chop a portion by a given delimiter. You can trim from left, right
-   and both the sides. [td_string_view_chop, td_string_view_trim_left,
-   td_string_view_trim_right, td_string_view_trim]
+   and both the sides. You can also slice a string from [start, end).
+   [td_string_view_chop, td_string_view_trim_left, td_string_view_trim_right,
+   td_string_view_trim, td_string_view_slice]
+
+   You can read a complete file into a string buffer. [td_read_file_to_string]
  */
 
 #ifndef TD_LIBDEF
@@ -181,26 +184,26 @@
 
 #include <stdint.h>
 
-typedef int8_t i8;
+typedef int8_t  i8;
 typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-typedef uint8_t u8;
+typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef i8 b8;
+typedef i8  b8;
 typedef i32 b32;
 typedef i64 b64;
 
-typedef float f32;
+typedef float  f32;
 typedef double f64;
 
 #define global_variable static
-#define local_persist static
-#define internal static
+#define local_persist   static
+#define internal        static
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -289,17 +292,18 @@ typedef struct {
         (string)->size = (string)->alloc = 0;   \
     } while (0)
 
-TD_LIBDEF TD_String_View td_string_view_from_string(TD_String *str);
-TD_LIBDEF TD_String_View td_string_view_from_cstr(char *cstr);
-TD_LIBDEF bool           td_string_view_equal(TD_String_View a, TD_String_View b);
-TD_LIBDEF TD_String_View td_string_view_chop(TD_String_View *v, char delim);
-TD_LIBDEF TD_String_View td_string_view_trim_left(TD_String_View v);
-TD_LIBDEF TD_String_View td_string_view_trim_right(TD_String_View v);
-TD_LIBDEF TD_String_View td_string_view_trim(TD_String_View v);
+TD_LIBDEF TD_String_View td_string_view_from_string(TD_String*);
+TD_LIBDEF TD_String_View td_string_view_from_cstr(char*);
+TD_LIBDEF bool           td_string_view_equal(TD_String_View, TD_String_View);
+TD_LIBDEF TD_String_View td_string_view_slice(const TD_String_View, size_t, size_t);
+TD_LIBDEF TD_String_View td_string_view_chop(TD_String_View*, char);
+TD_LIBDEF TD_String_View td_string_view_trim_left(TD_String_View);
+TD_LIBDEF TD_String_View td_string_view_trim_right(TD_String_View);
+TD_LIBDEF TD_String_View td_string_view_trim(TD_String_View);
 
-TD_LIBDEF TD_String_View td_string_slice(const TD_String *str,
-                                         size_t           start,
-                                         size_t           end);
+TD_LIBDEF TD_String_View td_string_slice(const TD_String*, size_t, size_t);
+
+TD_LIBDEF bool		 td_read_file_to_string(TD_String*, FILE*);
 #endif /* TDLIB_H */
 
 
@@ -326,6 +330,15 @@ td_string_view_equal(TD_String_View a, TD_String_View b)
     for (size_t i = 0; i < a.size; i++)
         if (a.data[i] != b.data[i]) return false;
     return true;
+}
+
+TD_LIBDEF TD_String_View
+td_string_view_slice(const TD_String_View v, size_t start, size_t end)
+{
+    if (start > end) start = end;
+    if (end > v.size) end = v.size;
+
+    return (TD_String_View) { v.data + start, end - start };
 }
 
 TD_LIBDEF TD_String_View
@@ -381,6 +394,30 @@ td_string_slice(const TD_String *str,
     if (end < start) end = start;
 
     return (TD_String_View) { str->data + start, end - start };
+}
+
+TD_LIBDEF bool
+td_read_file_to_string(TD_String *str, FILE *fp)
+{
+    i32 file_size;
+    size_t read;
+
+    if (fseek(fp, 0, SEEK_END) != 0)
+        return false;
+
+    file_size = ftell(fp);
+    if (file_size < 0)
+        return false;
+
+    rewind(fp);
+
+    td__vec_alloc(str, (size_t)file_size);
+    read = fread(str->data, 1, (size_t)file_size, fp);
+    if (read != (size_t)file_size)
+        return false;
+
+    str->size = read;
+    return true;
 }
 
 #endif /* TDLIB_IMPLEMENTATION */
